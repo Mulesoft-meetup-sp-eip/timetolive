@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq" xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/amqp http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd">
+	<sub-flow name="publisher_amq-Sub_flow" doc:id="d6d393a1-2832-4323-ac80-5b651460ae0d" >
+		<logger level="INFO" doc:name="Log PERSON being Published" doc:id="6e8fb771-c7e9-45c3-89e4-a82ddd32fff9" message='#[%dw 2.0
+output application/json
+---
+{
+	target: "AMQ",
+	message: "Person named " 
+	++ (vars.person."first-name" default "NONAME") 
+	++ " received through HTTP request.",
+	operation: attributes.queryParams."operation" default "NOOPERATION"
+}]'/>
+		<anypoint-mq:publish doc:name="Publish eip-timetolive" doc:id="39addecd-041b-4ab7-8f3e-f7083fc4d2d6" config-ref="Anypoint_MQ_Config" destination="${amq.publisher1.exchange}">
+			<anypoint-mq:body><![CDATA[#[%dw 2.0
+output application/json
+---
+payload]]]></anypoint-mq:body>
+			<anypoint-mq:properties ><![CDATA[#[output application/java
+---
+{
+	delay : attributes.queryParams."delay" default "0",
+	operation : attributes.queryParams."operation"
+}]]]></anypoint-mq:properties>
+		</anypoint-mq:publish>
+	</sub-flow>
+	<flow name="listener1-amq-Flow" doc:id="c383c361-03b9-4891-b095-a0d97abff1a3">
+		<!-- 
+		<anypoint-mq:subscriber doc:name="Manual ACK" doc:id="3b1a24e2-6b62-4eb6-8d6f-d06ffe8721ee" config-ref="Anypoint_MQ_Config" destination="${amqp.listener1.queue}" acknowledgementMode="MANUAL">
+			<redelivery-policy maxRedeliveryCount="3"/>
+			<reconnect-forever />
+			<anypoint-mq:subscriber-type >
+				<anypoint-mq:prefetch maxLocalMessages="1" />
+			</anypoint-mq:subscriber-type>
+		</anypoint-mq:subscriber>
+		 -->
+		<scheduler doc:name="Scheduler" doc:id="ebe47523-91c4-42c7-9b97-b738f1cc29eb" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="5000"/>
+			</scheduling-strategy>
+		</scheduler>
+		<anypoint-mq:consume doc:name="Consume from backend5-person-main" doc:id="614673c9-cb32-4ae5-92ea-2398eb317abe" config-ref="Anypoint_MQ_Config" destination="${amq.listener1.queue}" acknowledgementMode="MANUAL">
+			<reconnect-forever />
+		</anypoint-mq:consume>
+		<ee:transform doc:name="Set vars for person , headers from AMQP MSG and save ackToken value" doc:id="bc4ff4a9-7d7d-47da-931a-60c3da51e623">
+			<ee:message />
+			<ee:variables>
+				<ee:set-variable variableName="person"><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-variable>
+				<ee:set-variable variableName="operation"><![CDATA[attributes.properties.operation]]></ee:set-variable>
+				<ee:set-variable variableName="delay" ><![CDATA[attributes.properties.delay]]></ee:set-variable>
+				<ee:set-variable variableName="ackToken" ><![CDATA[attributes.ackToken]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log Person MSG" doc:id="327a4c77-be2f-4eb3-a160-7d540392a2de" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "AMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " received from the queue.",
+	operation: vars.operation
+}]'/>
+		<choice doc:name="Check operation" doc:id="2980634c-f014-4306-a016-ba60811ce0fb" >
+			<when expression='#[vars."operation" == "NOACTION"]'>
+				<logger level="INFO" doc:name="Log NO ACTION" doc:id="d712f109-8a09-4a8d-abb0-3676a7a26e87" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "AMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "") 
+		++ " no action taken to ack but received succesfully"
+}]' />
+			</when>
+			<when expression='#[vars."operation" == "REJECT"]' >
+				<logger level="INFO" doc:name="Log NACK" doc:id="f70ef045-905d-4ff6-a574-23ea56c78a6b" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "AMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " rejected."
+}]' />
+				<anypoint-mq:nack doc:name="Nack" doc:id="d9b19069-86e1-44ec-9122-2e3a94e4ff9f" config-ref="Anypoint_MQ_Config" ackToken="#[attributes.ackToken]">
+					<reconnect />
+				</anypoint-mq:nack>
+			</when>
+			<when expression='#[vars."operation" == "ERROR"]'>
+				<logger level="INFO" doc:name="Log ERROR" doc:id="e5d7c0f0-b017-42ee-8416-8220d21e32a4" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "AMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " received with errors."
+}]'/>
+				<raise-error doc:name="Raise error" doc:id="529ab9f3-f351-4999-9cc2-2a5acf2597b4" type="BUSINESS:PERSON_IS_BLOCKED" description="This person is not allowed to be inserted on the system." />
+			</when>
+			<when expression='#[vars.operation == "DELAY"]'>
+				<logger level="INFO" doc:name="Log DELAY" doc:id="cd638ee1-785b-4e26-9ebb-f37ac21a50ff" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	source: "RMQ",&#10;	message: "Person named " &#10;		++ (vars.person."first-name" default "NONAME") &#10;		++ " received for delayed insertion.",&#10;	delay: vars.delay&#10;}]'/>
+				<ee:transform doc:name="Wait delay amount" doc:id="3f054336-cd2d-4e39-9af6-11c9a7d7ae94" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+import * from dw::Runtime
+output application/java
+---
+payload wait (vars.delay default 5000)]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<anypoint-mq:ack doc:name="Ack" doc:id="7f783f9b-2d86-4b94-9dd6-0beecfe1fbac" config-ref="Anypoint_MQ_Config" ackToken="#[attributes.ackToken]">
+					<reconnect />
+				</anypoint-mq:ack>
+				<logger level="INFO" doc:name="Log FINISH DELAYED" doc:id="1bcfd603-7601-4839-a8e3-593285f509ea" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	source: "RMQ",&#10;	message: "Person named " &#10;		++ (vars.person."first-name" default "NONAME") &#10;		++ " received for delayed insertion.",&#10;	delay: vars.delay&#10;}]' />
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Log DEFAULT(EVERYTHING ELSE)" doc:id="fc5ef20f-8cff-47d8-86e8-a769662c0a75" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "AMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "") 
+		++ " accepted succesfully"
+}]'/>
+				<anypoint-mq:ack doc:name="Ack" doc:id="445e9767-4676-417d-ac5b-b630fc335a3a" config-ref="Anypoint_MQ_Config" ackToken="#[attributes.ackToken]">
+					<reconnect />
+				</anypoint-mq:ack>
+			</otherwise>
+		</choice>
+		<error-handler >
+			<on-error-continue enableNotifications="false" logException="false" doc:name="On Error Continue" doc:id="14f41eba-ad33-48e7-8177-d4b1aebebd40" type="ANYPOINT-MQ:TIMEOUT">
+				<logger level="ERROR" doc:name="Log Pooling ended" doc:id="a7f5f2ca-5345-4a97-93e9-2cc4641b762b" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "AMQ",
+	message: "Pooling ended.",
+	details: error.description default "NODESCRIPTION"
+}]' />
+			</on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="dc30824e-efdf-4943-91bd-c9817bf16858" type="MULE:REDELIVERY_EXHAUSTED">
+				<logger level="ERROR" doc:name="Log REJECT by ERROR THROWN" doc:id="a8672d0b-0e8b-4a01-b873-924252324a98" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "AMQ",
+	message: "Message Rejected by Exhaustion of Error Thrown.",
+	details: error.description default "NODESCRIPTION"
+}]' />
+				<anypoint-mq:nack doc:name="Nack" doc:id="966c3d45-321a-410f-8ead-bd05dd660590" config-ref="Anypoint_MQ_Config" ackToken="#[attributes.ackToken]" />
+			</on-error-continue>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="ffbb3c77-72eb-4216-a927-c040b0159cfa">
+				<logger level="ERROR" doc:name="Log ERROR THROWN" doc:id="971948a8-53f8-48bb-b46f-832dcec9b0b9" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "AMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " thrown an error.",
+	details: error.description default "NODESCRIPTION"
+}]'/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+</mule>

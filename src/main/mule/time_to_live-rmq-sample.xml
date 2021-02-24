@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/amqp http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+	<sub-flow name="publisher_rmq-Sub_flow" doc:id="8ffdb57b-c60d-4e1b-9611-c526a1fa48c2" >
+		<logger level="INFO" doc:name="Log PERSON being Published" doc:id="21766a89-ab21-47e7-b032-45c1ae8d3cb5" message='#[%dw 2.0
+output application/json
+---
+{
+	target: "RMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " received through HTTP request.",
+	operation: attributes.queryParams."operation" default "NOOPERATION"
+}]'/>
+		<amqp:publish doc:name="exchange eip-time_to_live" doc:id="163512ad-16b4-414f-b9df-a537554c69ac" config-ref="AMQP_Config" exchangeName="${amqp.publisher1.exchange}" deliveryMode="PERSISTENT" sendCorrelationId="AUTO">
+			<reconnect-forever />
+			<amqp:message>
+				<amqp:body><![CDATA[#[%dw 2.0
+output application/json
+---
+vars.person]]]></amqp:body>
+				<amqp:headers><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+	operation: attributes.queryParams."operation",
+	delay: (attributes.queryParams."delay" default "0")
+}]]]></amqp:headers>
+			</amqp:message>
+		</amqp:publish>
+	</sub-flow>
+	<flow name="listener1_rmq-Flow" doc:id="db05391d-1a66-41ef-9376-bf37cf3209e8" >
+		<amqp:listener doc:name="Queue backend5-person-main" doc:id="5a3bb19c-6745-49a3-b325-19ffa9219a38" config-ref="AMQP_Config" queueName="${amqp.listener1.queue}" ackMode="MANUAL">
+			<redelivery-policy/>
+			<reconnect-forever />
+		</amqp:listener>
+		<ee:transform doc:name="Set vars for person , headers from AMQP MSG and save ackToken value" doc:id="52ab174b-9977-41aa-930f-e9db0fffd396" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="person" ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+				<ee:set-variable variableName="operation" ><![CDATA[(attributes.headers[1] as Object)[1] as String]]></ee:set-variable>
+				<ee:set-variable variableName="delay" ><![CDATA[(attributes.headers[0] as Object)[1] as String]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log Person MSG" doc:id="ac2cab64-48e3-463a-8cb7-980226f0a938" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "RMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " received from the queue.",
+	operation: vars.operation
+}]'/>
+		<choice doc:name="Check operation" doc:id="878baf09-5eb7-4d2a-9447-3b3f9e8263e7" >
+			<when expression='#[vars.operation == "NOACTION"]'>
+				<logger level="INFO" doc:name="Log NOACTION" doc:id="20f0a198-506c-4bf6-ba80-392569d22027" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "RMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "") 
+		++ " not acked but received succesfully"
+}]' />
+			</when>
+			<when expression='#[vars.operation == "REJECT"]' >
+				<logger level="INFO" doc:name="Log REJECTED" doc:id="b31b0e93-ee9a-49ae-a896-be1a5700b315" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "RMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " rejected."
+}]' />
+				<amqp:reject doc:name="Reject" doc:id="79a00de5-84c1-453f-afca-beba909dac0e" ackId="#[attributes.ackId]"/>
+			</when>
+			<when expression='#[vars.operation == "ERROR"]'>
+				<logger level="INFO" doc:name="Log ERROR" doc:id="142b796b-afbe-41e5-9fd2-8996b5aacef7" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "RMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " received with errors."
+}]'/>
+				<raise-error doc:name="Raise error Person is Blocked" doc:id="abdeee1c-ddbc-49fe-a8e4-1c63f9faa6bc" type="BUSINESS:PERSON_IS_BLOCKED" description="This person is not allowed to be inserted on the system." />
+			</when>
+			<when expression='#[vars.operation == "DELAY"]'>
+				<logger level="INFO" doc:name="Log DELAY" doc:id="f7ea9adc-326a-4de0-aea0-37cbc12711ad" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	source: "RMQ",&#10;	message: "Person named " &#10;		++ (vars.person."first-name" default "NONAME") &#10;		++ " received for delayed insertion.",&#10;	delay: vars.delay&#10;}]'/>
+				<ee:transform doc:name="Wait delay amount" doc:id="fda7b1d7-f5cc-4ad3-9c6e-d58609f2151f" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+import * from dw::Runtime
+output application/java
+---
+payload wait (vars.delay default 5000)]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<amqp:ack doc:name="Ack" doc:id="08ff2628-6914-4b8d-a6dd-61e4b3dc4792" ackId="#[attributes.ackId]" />
+				<logger level="INFO" doc:name="Log FINISH DELAYED" doc:id="fa45d7e4-757d-49b5-9a89-ee79a2eb6fe0" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	source: "RMQ",&#10;	message: "Person named " &#10;		++ (vars.person."first-name" default "NONAME") &#10;		++ " finished the delayed processing.",&#10;	delay: vars.delay&#10;}]' />
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Log DEFAULT(EVERYTHING ELSE)" doc:id="64e08743-ba9b-4c82-ad51-3beafa4e68d4" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "RMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "") 
+		++ " accepted succesfully"
+}]'/>
+				<amqp:ack doc:name="Ack" doc:id="ca62f889-ef3b-4233-bf2d-db25bf3ce1b7" ackId="#[attributes.ackId]"/>
+			</otherwise>
+		</choice>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="c2c6bb9e-5bc6-48e8-9ea4-5f54593f0477" type="MULE:REDELIVERY_EXHAUSTED">
+				<logger level="ERROR" doc:name="Log REJECT by ERROR THROWN" doc:id="5e844040-4253-4c8d-b581-bde248a436e3" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "RMQ",
+	message: "Message Rejected by Exhaustion of Error Thrown.",
+	details: error.description default "NODESCRIPTION"
+}]' />
+				<amqp:reject doc:name="Reject" doc:id="5ea4ec7c-1648-4098-9749-a965d0aee907" ackId="#[attributes.ackId]"/>
+			</on-error-continue>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="3733bd08-2e01-4b1e-8132-56118856a966" type="ANY">
+				<logger level="ERROR" doc:name="Log ERROR THROWN" doc:id="db85a69b-7d0f-4b16-9bd6-ab09b3995e2a" message='#[%dw 2.0
+output application/json
+---
+{
+	source: "RMQ",
+	message: "Person named " 
+		++ (vars.person."first-name" default "NONAME") 
+		++ " thrown an error.",
+	details: error.description default "NODESCRIPTION"
+}]'/>
+			</on-error-propagate>
+			
+			
+		</error-handler>
+	</flow>
+</mule>

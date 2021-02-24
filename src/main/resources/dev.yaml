@@ -8,7 +8,7 @@ amqp:
   publisher1:
     exchange: eip-time_to_live
   listener1:
-    queue: backend5-person
+    queue: backend5-person-main
     
 amq:
   url: "https://mq-us-east-1.anypoint.mulesoft.com/api/v1"
@@ -17,7 +17,7 @@ amq:
   publisher1:
     exchange: eip-timetolive
   listener1:
-    queue: backend5-person
+    queue: backend5-person-main
   
 http:
   listener:

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd ">
+<mule xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
     <apikit:config name="time_to_live-sample-config" api="resource::44285fea-d398-4b00-9384-02ff82bc90bf:time_to_live-sample:1.0.0:raml:zip:time_to_live-sample.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
     <flow name="time_to_live-sample-main">
         <http:listener path="/api/*" config-ref="HTTP_Listener_config">
@@ -121,7 +122,25 @@ output application/json
         </error-handler>
     </flow>
     <flow name="post:\person:application\json:time_to_live-sample-config">
-        <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+        <ee:transform doc:name="Set var person Java Object" doc:id="1058ec47-65f7-4fec-907f-3c832c74449f" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="person" ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<choice doc:name='Choice "mb" Message Broker' doc:id="47979682-c192-4fdf-94fb-9ad2b56ba19e">
+			<when expression='#[attributes.queryParams."mb" == "AMQ"]'>
+				<flow-ref doc:name="publisher_amq-Sub_flow" doc:id="c931a63e-f837-4490-954c-d90a75b84f08" name="publisher_amq-Sub_flow" />
+			</when>
+			<otherwise>
+				<flow-ref doc:name="publisher_rmq-Sub_flow" doc:id="4f75e228-5835-4411-8bd8-5a70ddce5ab1" name="publisher_rmq-Sub_flow" />
+			</otherwise>
+		</choice>
+		<ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd" doc:id="4279423c-27e2-45ba-a12b-e5c9976fee54" doc:name="Set payload example transaction">
             <ee:message>
                 <ee:set-payload><![CDATA[%dw 2.0
 output application/json
@@ -129,13 +148,15 @@ output application/json
 {
   uid: "9FaCD076-aca2-Ac99-5A7AceC80bD8",
   "http-method": "POST",
-  resource: "/orders",
-  key: 582,
+  resource: "/person",
+  key: "",
   status: "Queued",
   details: "Inserted on the queue",
-  "created-at": "2021-01-21T03:30:35.961Z"
+  "created-at": now() as DateTime >> "America/Sao_Paulo" as String {format: "yyyy-MM-dd HH:mm:ss"}
 }]]></ee:set-payload>
             </ee:message>
+			<ee:variables >
+			</ee:variables>
         </ee:transform>
     </flow>
 </mule>

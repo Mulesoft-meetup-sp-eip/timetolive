@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq" xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/amqp http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd">
+	<amqp:config name="AMQP_Config" doc:name="AMQP Config" doc:id="9b449c33-9127-4542-81a5-7ac934733d5b" >
+		<amqp:connection host="${amqp.host}" port="${amqp.port}" virtualHost="${amqp.virtualHost}" username="${amqp.username}" password="${amqp.password}" heartbeatTimeout="${amqp.heartbeatTimeout}" >
+			<reconnection >
+				<reconnect-forever frequency="5000" />
+			</reconnection>
+		</amqp:connection>
+		<amqp:consumer-config ackMode="AUTO" numberOfConsumers="1" />
+		<amqp:publisher-config requestBrokerConfirms="true" deliveryMode="TRANSIENT"/>
+		<amqp:quality-of-service-config prefetchCount="1" />
+	</amqp:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="c9a546f2-e21b-44d7-957d-91d2a17a202f" basePath="${http.listener.basepath}" >
+		<http:listener-connection host="0.0.0.0" port="${http.listener.port}" />
+	</http:listener-config>
+	<api-gateway:autodiscovery apiId="${api.id}" ignoreBasePath="true" doc:name="API Autodiscovery" doc:id="58b5a6de-4546-432b-9852-1fe729f5cc3d" flowRef="time_to_live-sample-main" />
+	<configuration-properties doc:name="Configuration properties" doc:id="28d12ce8-5f28-4e92-8531-43be8b2705c0" file="${env_var}.yaml" />
+	<anypoint-mq:config name="Anypoint_MQ_Config" doc:name="Anypoint MQ Config" doc:id="070a93d3-822e-4205-8ce4-605194876a7c" >
+		<anypoint-mq:connection url="${amq.url}" clientId="${amq.client_id}" clientSecret="${amq.client_secret}" >
+			<reconnection >
+				<reconnect-forever frequency="5000" />
+			</reconnection>
+		</anypoint-mq:connection>
+	</anypoint-mq:config>
+</mule>

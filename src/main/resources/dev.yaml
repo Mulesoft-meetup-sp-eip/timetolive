@@ -1,0 +1,28 @@
+amqp:
+  host: "***REMOVED***"
+  port: "5672"
+  virtualHost: "***REMOVED***"
+  username: "***REMOVED***"
+  password: "***REMOVED***"
+  heartbeatTimeout: "60"
+  publisher1:
+    exchange: eip-time_to_live
+  listener1:
+    queue: backend5-person
+    
+amq:
+  url: "https://mq-us-east-1.anypoint.mulesoft.com/api/v1"
+  client_id: "***REMOVED***"
+  client_secret: "***REMOVED***"
+  publisher1:
+    exchange: eip-timetolive
+  listener1:
+    queue: backend5-person
+  
+http:
+  listener:
+    basepath: "/time_to_live"
+    port: "8081"
+    
+api:
+  id: "***REMOVED***"

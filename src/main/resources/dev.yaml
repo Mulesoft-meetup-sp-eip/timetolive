@@ -9,16 +9,23 @@ amqp:
     exchange: eip-time_to_live
   listener1:
     queue: backend5-person-main
-    
+  
 amq:
   url: "https://mq-us-east-1.anypoint.mulesoft.com/api/v1"
   client_id: "***REMOVED***"
   client_secret: "***REMOVED***"
   publisher1:
     exchange: eip-timetolive
-  listener1:
+  consumer1:
     queue: backend5-person-main
-  
+    pooling-time: "15000"
+    ack-timeout: "0"
+
+scheduler:
+  listener1amq:
+    frequency: "3000"
+    start-delay: "0"
+
 http:
   listener:
     basepath: "/time_to_live"
